@@ -2,7 +2,7 @@
 import crypto from 'crypto'
 import { readFileSync } from 'fs'
 
-const privateKey = readFileSync('./cbam-private.pem', 'utf8')
+const privateKey = process.env.RSA_PRIVATE_PEM
 
 export async function POST(req) {
   const payload = await req.text()          // ① 直接读字符串
