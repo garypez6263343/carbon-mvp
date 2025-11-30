@@ -60,11 +60,11 @@ export default function Home() {
 
       const out: any[][] = []
       for (let i = 0; i < data.length; i++) {
-        if (i === 0) { out.push([...data[i], 'Mode', 'CO2e']); continue }   // ← 表头加 Mode
+        if (i === 0) { out.push([...data[i], 'CO2e']); continue }
         const [prod, qty, wt, dist, mode] = data[i]
         const coef = await getCoef(mode || 'Road')
         const co2e = (qty * wt * dist * coef) / 1000
-        out.push([prod, qty, wt, dist, mode || 'Road', co2e])             // ← 兜底 Road
+        out.push([prod, qty, wt, dist, mode, co2e])
       }
 
       const total = out.slice(1).reduce((s, r) => s + (r[5] || 0), 0)
@@ -81,7 +81,7 @@ export default function Home() {
 
       const { data: newCount, error } = await supabase.rpc('increment_report_by_email', { email: user.email.trim().toLowerCase() })
       if (error || newCount === null) console.error('计数失败', error, newCount)
-      else setUsed(newCount)
+      else setUsed(newCount) // ← 立即刷新显示
     } catch (e) {
       console.error('handleFile error', e)
     } finally {
@@ -89,38 +89,16 @@ export default function Home() {
     }
   }
 
-  /* ===== 空白模板下载 ===== */
-  const downloadTemplate = () => {
-    const header = [['Product', 'Quantity', 'Weight (kg)', 'Distance (km)', 'Mode']]
-    const example = [['Phone Case', 100, 12, 1200, 'Road']]
-    const ws = XLSX.utils.aoa_to_sheet([...header, ...example])
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, 'Template')
-    XLSX.writeFile(wb, 'EN16258_Template.xlsx')
-  }
-  /* ======================== */
-
   return (
     <main className="min-h-screen bg-slate-50 flex items-center justify-center px-6">
       <div className="w-full max-w-2xl bg-white rounded-2xl shadow-xl p-8 space-y-6">
         <div className="w-full max-w-4xl bg-white rounded-xl shadow p-6 mb-6">
           <h2 className="text-lg font-semibold text-slate-800 mb-3">How to use</h2>
-          <ol className="list-decimal ml-6 text-slate-600 space-y-2">
-            <li>Download the blank template below and fill in columns: Product, Quantity, Weight (kg), Distance (km), Mode (Road/Rail/Sea/Air; blank = Road)</li>
-            <li>Upload the completed file — we calculate CO₂e using live DEFRA 2025 factors per EN 16258</li>
-            <li>Download the RSA-signed PDF, ready for CBAM, ESRS or SEC submission (±5 % uncertainty)</li>
-          </ol>
-
-          {/* 模板下载按钮 */}
-          <div className="mt-4">
-            <button
-              onClick={downloadTemplate}
-              className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
-            >
-              <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20"><path d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z"></path></svg>
-              Download blank template
-            </button>
-          </div>
+          <ul className="list-disc ml-6 text-slate-600 space-y-1">
+            <li>Upload one XLSX file with columns: Product, Quantity, Weight (kg), Distance (km), Mode (Road/Rail/Sea/Air; blank = Road)</li>
+            <li>We calculate CO₂e using official DEFRA 2025 factors and split WTT/TTW per EN 16258</li>
+            <li>Download a digitally-signed PDF ready for CBAM, ESRS or SEC submission</li>
+          </ul>
 
           <h3 className="text-lg font-semibold text-slate-800 mt-4 mb-2">Why us</h3>
           <ul className="list-disc ml-6 text-slate-600 space-y-1">
