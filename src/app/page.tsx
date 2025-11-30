@@ -13,6 +13,18 @@ export default function Home() {
   const [sent, setSent] = useState(false)
   const [used, setUsed] = useState(0)
 
+  /* ====== 魔法链接：进来就吃掉 hash 自动登录 ====== */
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const hash = window.location.hash
+    if (hash.includes('access_token') && hash.includes('type=magiclink')) {
+      supabase.auth.onAuthStateChange((_event, session) => {
+        if (session?.user) window.location.reload()
+      })
+    }
+  }, [])
+  /* =================================================== */
+
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       const u = data.session?.user
@@ -27,7 +39,12 @@ export default function Home() {
   }
 
   const sendMagic = async () => {
-    await fetch('/api/auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }) })
+    /* 400 克星：写全线上域名 */
+    await fetch('https://www.emissionreport.top/api/auth', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email })
+    })
     setSent(true)
   }
 
@@ -81,7 +98,7 @@ export default function Home() {
 
       const { data: newCount, error } = await supabase.rpc('increment_report_by_email', { email: user.email.trim().toLowerCase() })
       if (error || newCount === null) console.error('计数失败', error, newCount)
-      else setUsed(newCount) // ← 立即刷新显示
+      else setUsed(newCount)
     } catch (e) {
       console.error('handleFile error', e)
     } finally {
