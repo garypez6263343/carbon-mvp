@@ -1,43 +1,43 @@
 import { Document, Page, Text, View, StyleSheet, Link } from '@react-pdf/renderer'
 
 const styles = StyleSheet.create({
-  page: { padding: 50, fontSize: 10, lineHeight: 1.4 },
-  h1: { fontSize: 18, marginBottom: 10, textAlign: 'center' },
-  h2: { fontSize: 12, marginBottom: 6 },
-  tableRow: { flexDirection: 'row', marginBottom: 3 },
-  col: { width: '14%' },
-  link: { color: 'blue', textDecoration: 'underline' },
-  footer: { marginTop: 30, fontSize: 8, color: '#555' }
+  page: { padding: 40, fontSize: 11, lineHeight: 1.35, backgroundColor: '#ffffff' },
+  h1: { fontSize: 20, marginBottom: 12, textAlign: 'center', color: '#1f2937', fontWeight: 'bold' },
+  h2: { fontSize: 14, marginBottom: 8, color: '#374151', fontWeight: 'bold' },
+  tableRow: { flexDirection: 'row', marginBottom: 4, borderBottomWidth: 0.5, borderBottomColor: '#e5e7eb', paddingVertical: 3 },
+  col: { width: '14%', fontSize: 10, color: '#374151' },
+  link: { color: '#2563eb', textDecoration: 'underline' },
+  footer: { marginTop: 28, fontSize: 8, color: '#6b7280', textAlign: 'center' }
 })
 
 export default function ReportPDF({ company, reportNo, date, rows, total, signer = 'Environmental Manager' }: any) {
-  // 写死 Road+Diesel 因子 (DEFRA 2025 v1.0  Table 12  WTW)
   const EF_WTT = 0.021
   const EF_TTW = 0.084
+  const VERIFY_BASE = process.env.NEXT_PUBLIC_VERIFY_URL || 'http://localhost:3000'
 
   return (
     <Document>
       {/* ① Cover */}
       <Page style={styles.page}>
         <Text style={styles.h1}>Carbon Scope-3 Transport Report</Text>
-        <Text>Company: {company}</Text>
-        <Text>Report No.: {reportNo}</Text>
-        <Text>Date: {date}</Text>
+        <Text style={{ marginBottom: 6 }}>Company: {company}</Text>
+        <Text style={{ marginBottom: 6 }}>Report No.: {reportNo}</Text>
+        <Text style={{ marginBottom: 6 }}>Date: {date}</Text>
         <Text style={styles.h2}>1. Executive Summary</Text>
-        <Text>This document presents the greenhouse gas (GHG) emissions for transport chain activities of the above-named company, calculated in accordance with EN 16258:2013 and ISO 14064-1:2018.</Text>
+        <Text style={{ marginBottom: 6 }}>This document presents the greenhouse gas (GHG) emissions for transport chain activities of the above-named company, calculated in accordance with EN 16258:2013 and ISO 14064-1:2018.</Text>
         <Text>Total transport emissions: {(total/1000).toFixed(3)} tCO₂e</Text>
       </Page>
 
       {/* ② Method */}
       <Page style={styles.page}>
         <Text style={styles.h2}>2. Methodology & Factors</Text>
-        <Text>• Standard: EN 16258:2013 (Well-to-Wheel, WTW)</Text>
-        <Text>• Conversion factors: UK DEFRA 2025 v1.0, Table 12 (Road freight)</Text>
-        <Text>• GWP values: IPCC AR6 (100-year)</Text>
-        <Text>• Formula: E = Σ (mass[t] × distance[km] × EF[kg CO₂e/t·km])</Text>
-        <Text>• Boundary: transport leg from supplier gate to recipient gate</Text>
-        <Text>• Default mode: Road, Diesel (client can override in app)</Text>
-        <Text>• Data quality: company ERP export, ±5 % uncertainty</Text>
+        <Text style={{ marginBottom: 4 }}>• Standard: EN 16258:2013 (Well-to-Wheel, WTW)</Text>
+        <Text style={{ marginBottom: 4 }}>• Conversion factors: UK DEFRA 2025 v1.0, Table 12 (Road freight)</Text>
+        <Text style={{ marginBottom: 4 }}>• GWP values: IPCC AR6 (100-year)</Text>
+        <Text style={{ marginBottom: 4 }}>• Formula: E = Σ (mass[t] × distance[km] × EF[kg CO₂e/t·km])</Text>
+        <Text style={{ marginBottom: 4 }}>• Boundary: transport leg from supplier gate to recipient gate</Text>
+        <Text style={{ marginBottom: 4 }}>• Default mode: Road, Diesel (client can override in app)</Text>
+        <Text style={{ marginBottom: 4 }}>• Data quality: company ERP export, ±5 % uncertainty</Text>
         <Link src="https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025">Factor source (hyperlinked)</Link>
       </Page>
 
@@ -55,33 +55,31 @@ export default function ReportPDF({ company, reportNo, date, rows, total, signer
           <Text style={styles.col}>TTW(tCO₂e)</Text>
           <Text style={styles.col}>Total(tCO₂e)</Text>
         </View>
-        // 在 map 里先解构，避免 TS 抱怨
-{rows.map((r: any, i: number) => {
-  // 如果外部还是按列传，就按索引读；否则直接读对象
-  const product   = Array.isArray(r) ? r[0] : r.product;
-  const qty       = Array.isArray(r) ? r[1] : r.qty;
-  const weightG   = Array.isArray(r) ? r[2] : r.weightG;
-  const distance  = Array.isArray(r) ? r[3] : r.distance;
-  const mode      = Array.isArray(r) ? 'Road' : (r.mode ?? 'Road');
-  const fuel      = Array.isArray(r) ? 'Diesel' : (r.fuel ?? 'Diesel');
-  const weightT   = weightG / 1000;
-  const wtt       = weightT * distance * EF_WTT;
-  const ttw       = weightT * distance * EF_TTW;
-  const totalRow  = wtt + ttw;
-  return (
-    <View style={styles.tableRow} key={i}>
-      <Text style={styles.col}>{product}</Text>
-      <Text style={styles.col}>{qty}</Text>
-      <Text style={styles.col}>{weightT.toFixed(3)}</Text>
-      <Text style={styles.col}>{distance}</Text>
-      <Text style={styles.col}>{mode}</Text>
-      <Text style={styles.col}>{fuel}</Text>
-      <Text style={styles.col}>{wtt.toFixed(4)}</Text>
-      <Text style={styles.col}>{ttw.toFixed(4)}</Text>
-      <Text style={styles.col}>{totalRow.toFixed(4)}</Text>
-    </View>
-  );
-})}
+        {rows.map((r: any, i: number) => {
+          const product   = Array.isArray(r) ? r[0] : r.product
+          const qty       = Array.isArray(r) ? r[1] : r.qty
+          const weightG   = Array.isArray(r) ? r[2] : r.weightG
+          const distance  = Array.isArray(r) ? r[3] : r.distance
+          const mode      = Array.isArray(r) ? 'Road' : (r.mode ?? 'Road')
+          const fuel      = Array.isArray(r) ? 'Diesel' : (r.fuel ?? 'Diesel')
+          const weightT   = weightG / 1000
+          const wtt       = weightT * distance * EF_WTT
+          const ttw       = weightT * distance * EF_TTW
+          const totalRow  = wtt + ttw
+          return (
+            <View style={styles.tableRow} key={i}>
+              <Text style={styles.col}>{product}</Text>
+              <Text style={styles.col}>{qty}</Text>
+              <Text style={styles.col}>{weightT.toFixed(3)}</Text>
+              <Text style={styles.col}>{distance}</Text>
+              <Text style={styles.col}>{mode}</Text>
+              <Text style={styles.col}>{fuel}</Text>
+              <Text style={styles.col}>{wtt.toFixed(4)}</Text>
+              <Text style={styles.col}>{ttw.toFixed(4)}</Text>
+              <Text style={styles.col}>{totalRow.toFixed(4)}</Text>
+            </View>
+          )
+        })}
         <Text style={{ marginTop: 10 }}>Total: {(total/1000).toFixed(3)} tCO₂e</Text>
         <Text style={styles.footer}>Uncertainty: ±5 % (DEFRA 2025 Table 12 Road Freight)</Text>
       </Page>
@@ -89,14 +87,13 @@ export default function ReportPDF({ company, reportNo, date, rows, total, signer
       {/* ④ Sign */}
       <Page style={styles.page}>
         <Text style={styles.h2}>4. Electronic Signature</Text>
-        <Text>This report has been digitally signed in accordance with ISO 14064-1:2018 and EN 16258:2013.</Text>
-        <Text> </Text>
-        <Text>Signer: {signer}</Text>
-        <Text>Position: Environmental Manager</Text>
-        <Text>Date: {date}</Text>
-        <Text>Unique report ID: {reportNo}</Text>
-        <Link src={`http://localhost:3000/verify/${reportNo}`}>Verify signature</Link>
-        <Text style={styles.footer}>RSA-2048 digital signature applied – verify at http://localhost:3000/verify/{reportNo}</Text>
+        <Text style={{ marginBottom: 6 }}>This report has been digitally signed in accordance with ISO 14064-1:2018 and EN 16258:2013.</Text>
+        <Text style={{ marginBottom: 6 }}>Signer: {signer}</Text>
+        <Text style={{ marginBottom: 6 }}>Position: Environmental Manager</Text>
+        <Text style={{ marginBottom: 6 }}>Date: {date}</Text>
+        <Text style={{ marginBottom: 6 }}>Unique report ID: {reportNo}</Text>
+        <Link src={`${VERIFY_BASE}/verify/${reportNo}`}>Verify signature</Link>
+        <Text style={styles.footer}>{`RSA-2048 digital signature applied – verify at ${VERIFY_BASE}/verify/${reportNo}`}</Text>
       </Page>
     </Document>
   )

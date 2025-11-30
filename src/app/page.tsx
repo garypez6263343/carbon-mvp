@@ -95,7 +95,7 @@ export default function Home() {
         <div className="w-full max-w-4xl bg-white rounded-xl shadow p-6 mb-6">
           <h2 className="text-lg font-semibold text-slate-800 mb-3">How to use</h2>
           <ul className="list-disc ml-6 text-slate-600 space-y-1">
-            <li>Upload one XLSX file with columns: Product, Quantity, Weight (kg), Distance (km), Transport Mode (Road/Sea/Rail/Air)</li>
+            <li>Upload one XLSX file with columns: Product, Quantity, Weight (kg), Distance (km)</li>
             <li>We calculate CO₂e using official DEFRA 2025 factors and split WTT/TTW per EN 16258</li>
             <li>Download a digitally-signed PDF ready for CBAM, ESRS or SEC submission</li>
           </ul>
@@ -128,25 +128,39 @@ export default function Home() {
           <p className="text-slate-500 mt-2">EN 16258:2013 compliant · Digital signature · 30-second delivery</p>
         </div>
         <div className="border-t border-slate-200"></div>
+
+        {/* 只改这里：彻底隐藏原生input，用英文按钮触发，再无中文 */}
         <div>
           <label className="block text-sm font-semibold text-slate-700 mb-2">Upload XLSX file</label>
-          <input
-            type="file"
-            accept=".xlsx"
-            onChange={handleFile}
-            disabled={loading || !user}
-            className="block w-full text-sm text-slate-600 file:mr-4 file:py-3 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-slate-800 file:text-white hover:file:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-500"
-          />
-        </div>
-        {loading && (
-          <div className="flex items-center justify-center py-4 gap-3 text-slate-600">
-            <svg className="h-5 w-5 text-slate-400" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2"></circle>
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-            </svg>
-            Calculating & signing...
+          <div className="flex items-center gap-3">
+            <input
+              ref={(el) => {
+                if (!el) return
+                el.style.width = '0'
+                el.style.height = '0'
+                el.style.opacity = '0'
+                el.style.position = 'absolute'
+              }}
+              type="file"
+              accept=".xlsx"
+              disabled={loading || !user}
+              onChange={handleFile}
+            />
+            <button
+              onClick={() =>
+                document.querySelector<HTMLInputElement>('input[type="file"][accept=".xlsx"]')?.click()
+              }
+              className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-semibold text-gray-700 bg-white hover:bg-gray-50"
+            >
+              Choose file
+            </button>
           </div>
+        </div>
+
+        {loading && (
+          <div className="text-center text-xs text-slate-500">Calculating & signing...</div>
         )}
+
         {pdfBlob && (
           <div className="text-center">
             <a
@@ -154,7 +168,6 @@ export default function Home() {
               download="carbon-report.pdf"
               className="inline-flex items-center px-6 py-3 bg-emerald-600 text-white font-semibold rounded-lg shadow hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500"
             >
-              <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20"><path d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z"></path></svg>
               Download PDF
             </a>
           </div>
