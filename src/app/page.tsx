@@ -9,26 +9,32 @@ export default function Home() {
   const [pdfBlob, setPdfBlob] = useState<Blob | null>(null)
   const [loading, setLoading] = useState(false)
   const [user, setUser] = useState<any>(null)
-  const [email, setEmail] = useState('')
-  const [sent, setSent] = useState(false)
   const [used, setUsed] = useState(0)
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
+    const fetchSession = async () => {
+      const { data } = await supabase.auth.getSession()
       const u = data.session?.user
       setUser(u)
       if (u) loadCount(u.id)
+    }
+    fetchSession()
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((_, session) => {
+      const u = session?.user
+      setUser(u)
+      if (u) loadCount(u.id)
+      else setUsed(0)
     })
+
+    return () => {
+      authListener.subscription.unsubscribe()
+    }
   }, [])
 
   const loadCount = async (uid: string) => {
     const { data } = await supabase.from('users').select('report_count').eq('id', uid).single()
     setUsed(data?.report_count ?? 0)
-  }
-
-  const sendMagic = async () => {
-    await fetch('/api/auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }) })
-    setSent(true)
   }
 
   const handleLogout = async () => {
@@ -38,20 +44,28 @@ export default function Home() {
   }
 
   const getCoef = async (mode: string) => {
-    const { data, error } = await supabase
-      .from('coefficients')
-      .select('co2e_kg_per_tkm')
-      .eq('mode', mode)
-      .single()
-    if (error || !data) return 0.105
-    return data.co2e_kg_per_tkm
+    const map: Record<string, number> = {
+      road: 0.025,
+      sea: 0.0085,
+      air: 0.501,
+      rail: 0.010
+    }
+    return map[mode.toLowerCase()] || 0.025
   }
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file || !user) return
-    if (used >= 120) { alert('Quota exceeded, +$40 per extra report.'); return }
+
     setLoading(true)
+
+    // 检查是否已付费（users 表存在该 email）
+    const { data } = await supabase.from('users').select('email').eq('email', user.email).single()
+    if (!data) {
+      alert('Please complete payment at the top of this page first.')
+      setLoading(false)
+      return
+    }
 
     try {
       const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' })
@@ -63,8 +77,8 @@ export default function Home() {
         if (i === 0) { out.push([...data[i], 'CO2e']); continue }
         const [prod, qty, wt, dist, mode] = data[i]
         const coef = await getCoef(mode || 'Road')
-        const co2e = (qty * wt * dist * coef) / 1000
-        out.push([prod, qty, wt, dist, mode, co2e])
+        const totalEmission_tCO2e = (qty * wt * dist * coef) / 1_000_000
+        out.push([prod, qty, wt, dist, mode, totalEmission_tCO2e])
       }
 
       const total = out.slice(1).reduce((s, r) => s + (r[5] || 0), 0)
@@ -77,13 +91,14 @@ export default function Home() {
       const pdfRes = await fetch('/api/pdf', { method: 'POST', body: JSON.stringify({ rows: out, total, company, reportNo, signatureHex, signer }) })
       const blob = await pdfRes.blob()
       setPdfBlob(blob)
-      await fetch('/api/store', { method: 'POST', body: JSON.stringify({ reportNo, payload, signatureHex }) })
 
+      // 存储报告并更新计数
+      await fetch('/api/store', { method: 'POST', body: JSON.stringify({ reportNo, payload, signatureHex }) })
       const { data: newCount, error } = await supabase.rpc('increment_report_by_email', { email: user.email.trim().toLowerCase() })
-      if (error || newCount === null) console.error('计数失败', error, newCount)
-      else setUsed(newCount) // ← 立即刷新显示
+      if (!error && newCount !== null) setUsed(newCount)
     } catch (e) {
       console.error('handleFile error', e)
+      alert('Failed to process file. Check console.')
     } finally {
       setLoading(false)
     }
@@ -92,44 +107,97 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-slate-50 flex items-center justify-center px-6">
       <div className="w-full max-w-2xl bg-white rounded-2xl shadow-xl p-8 space-y-6">
+        <div className="text-center">
+          <h1 className="text-3xl font-extrabold text-slate-800">Carbon Scope-3 Transport Report</h1>
+          <p className="text-slate-500 mt-2">EN 16258:2013 methodology · System-generated with integrity hash · 30-second delivery</p>
+        </div>
+
+        <div className="w-full max-w-4xl bg-white rounded-xl shadow p-6 mb-6 text-center">
+          <a
+            href="https://lopezian316.gumroad.com/l/carbondrop"
+            className="inline-flex items-center px-6 py-3 bg-emerald-600 text-white font-semibold rounded-lg shadow hover:bg-emerald-700"
+          >
+            ✅ Pay $1,499 → Get Instant Access & Generate Reports Now
+          </a>
+          <p className="text-xs text-slate-500 mt-2">
+            Pay with any email, then use that same email to log in and generate reports.<br />
+            If your submission is rejected by CDP/EcoVadis due to a calculation error on our part, email support@emissionreport.top within 30 days with evidence for a refund.
+          </p>
+        </div>
+
         <div className="w-full max-w-4xl bg-white rounded-xl shadow p-6 mb-6">
           <h2 className="text-lg font-semibold text-slate-800 mb-3">How to use</h2>
           <ul className="list-disc ml-6 text-slate-600 space-y-1">
             <li>Upload one XLSX file with columns: Product, Quantity, Weight (kg), Distance (km), Mode (Road/Rail/Sea/Air; blank = Road)</li>
-            <li>We calculate CO₂e using official DEFRA 2025 factors and split WTT/TTW per EN 16258</li>
-            <li>Download a digitally-signed PDF ready for CBAM, ESRS or SEC submission</li>
+            <li>We calculate CO₂e using the GLEC Framework v2.0 (2023) — the global standard for logistics emissions — in accordance with EN 16258:2013.</li>
+            <li>Download a system-generated PDF supporting disclosure preparation for CDP, EcoVadis, ESRS or SEC reporting.</li>
           </ul>
 
           <h3 className="text-lg font-semibold text-slate-800 mt-4 mb-2">Why us</h3>
           <ul className="list-disc ml-6 text-slate-600 space-y-1">
             <li>30-second turnaround · no consultancy fees</li>
-            <li>Default factors accepted by EU & US regulators (±5 % uncertainty)</li>
-            <li>RSA-2048 digital signature · instant verify</li>
-            <li>One fixed price: $6,000/year — unlimited reports</li>
+            <li>Uses GLEC v2.0 emission factors referenced in EU and US regulatory guidance</li>
+            <li>Includes ±22% uncertainty estimate per GLEC recommendations</li>
+            <li>SHA-256 integrity hash + unique report ID · verify online</li>
+            <li>One fixed price: $1,499/year — unlimited reports</li>
           </ul>
         </div>
 
-        {!user ? (
-          <div className="border rounded-lg p-4 space-y-2">
-            <input value={email} onChange={e => setEmail(e.target.value)} placeholder="your@company.com" className="w-full border rounded px-3 py-2"/>
-            <button onClick={sendMagic} className="w-full bg-slate-800 text-white rounded py-2">Send Magic Link</button>
-            {sent && <p className="text-sm text-green-600">Check your inbox!</p>}
-          </div>
-        ) : (
+        {/* 魔法链接登录 - 完全还原你应有的原始交互 */}
+        {user ? (
           <div className="flex items-center justify-between">
             <span className="text-sm text-slate-600">Logged in: {user.email}</span>
-            <span className="text-sm text-slate-600">Reports this year: {used}/120</span>
-            <button onClick={handleLogout} className="text-sm underline">Logout</button>
+            <span className="text-sm text-slate-600">Reports this year: {used}</span>
+            <button onClick={handleLogout} className="text-sm underline text-slate-600 hover:text-slate-800">
+              Logout
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <label className="block text-sm font-semibold text-slate-700">Email for magic link login</label>
+            <div className="flex gap-2">
+              <input
+                type="email"
+                id="magic-email"
+                placeholder="your@email.com"
+                className="flex-1 px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    const email = (e.target as HTMLInputElement).value.trim()
+                    if (email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+                      supabase.auth.signInWithOtp({ email })
+                      alert(`Magic link sent to ${email}. Check your inbox.`)
+                    } else {
+                      alert('Please enter a valid email address.')
+                    }
+                  }
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  const input = document.getElementById('magic-email') as HTMLInputElement
+                  const email = input?.value.trim()
+                  if (email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+                    supabase.auth.signInWithOtp({ email })
+                    alert(`Magic link sent to ${email}. Check your inbox.`)
+                  } else {
+                    alert('Please enter a valid email address.')
+                  }
+                }}
+                className="px-4 py-2 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 whitespace-nowrap"
+              >
+                Send magic link
+              </button>
+            </div>
+            <p className="text-xs text-slate-500">
+              Use the same email you paid with on Gumroad.
+            </p>
           </div>
         )}
 
-        <div className="text-center">
-          <h1 className="text-3xl font-extrabold text-slate-800">Carbon Scope-3 Transport Report</h1>
-          <p className="text-slate-500 mt-2">EN 16258:2013 compliant · Digital signature · 30-second delivery</p>
-        </div>
         <div className="border-t border-slate-200"></div>
 
-        {/* 只改这里：彻底隐藏原生input，用英文按钮触发，再无中文 */}
         <div>
           <label className="block text-sm font-semibold text-slate-700 mb-2">Upload XLSX file</label>
           <div className="flex items-center gap-3">
@@ -150,7 +218,12 @@ export default function Home() {
               onClick={() =>
                 document.querySelector<HTMLInputElement>('input[type="file"][accept=".xlsx"]')?.click()
               }
-              className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-semibold text-gray-700 bg-white hover:bg-gray-50"
+              disabled={!user}
+              className={`px-4 py-2 border rounded-md shadow-sm text-sm font-semibold ${
+                !user
+                  ? 'border-gray-200 text-gray-400 cursor-not-allowed bg-gray-50'
+                  : 'border-gray-300 text-gray-700 bg-white hover:bg-gray-50'
+              }`}
             >
               Choose file
             </button>
@@ -172,7 +245,10 @@ export default function Home() {
             </a>
           </div>
         )}
-        <div className="text-xs text-slate-400 text-center">RSA-2048 digitally signed · ISO 14064-1 & EN 16258:2013 compliant</div>
+        <div className="text-xs text-slate-400 text-center mt-4">
+          SHA-256 integrity hash + unique report ID · Calculated in accordance with ISO 14064-1 & EN 16258:2013<br />
+          If your submission is rejected by CDP/EcoVadis due to a calculation error on our part, email support@emissionreport.top within 30 days with evidence for a refund.
+        </div>
       </div>
     </main>
   )

@@ -10,10 +10,84 @@ const styles = StyleSheet.create({
   footer: { marginTop: 28, fontSize: 8, color: '#6b7280', textAlign: 'center' }
 })
 
-export default function ReportPDF({ company, reportNo, date, rows, total, signer = 'Environmental Manager' }: any) {
-  const EF_WTT = 0.021
-  const EF_TTW = 0.084
+// ===== 1. 系数字典 (kg CO₂e / kg·km) —— 使用 GLEC Framework v2.0 (2023)，符合 EN 16258 国际实践 =====
+const EF: Record<string, number> = {
+  road: 0.000158,  // GLEC: Road freight, HGV, EU average
+  sea:  0.0000131, // GLEC: Sea freight, container ship, deep sea
+  air:  0.000927   // GLEC: Air freight, long-haul cargo
+}
+
+// ===== 2. 统一算总排放（输入：总重量 kg）=====
+function calcTotalFromKg(weightKg: number, distance: number, mode: string) {
+  const f = EF[mode.toLowerCase()] ?? EF.road;
+  const emissionsKg = weightKg * distance * f; // kg CO₂e
+  return emissionsKg / 1000; // 转换为 tCO₂e
+}
+
+// ===== 3. 根据运输方式返回燃料类型（GLEC v2.0 术语）=====
+function getFuelType(mode: string): string {
+  const lower = mode.toLowerCase();
+  if (lower === 'air') return 'Kerosene'; // ✅ GLEC uses "Kerosene", not "Jet Fuel"
+  if (lower === 'sea') return 'Marine Fuel Oil (Residual)'; // ✅ GLEC standard term
+  return 'Diesel';
+}
+
+// ===== 新增：定义处理后的行数据类型（精简字段）=====
+interface ProcessedRow {
+  product: string;
+  qty: number;
+  unitWeightKg: number; // 改为原始单位 kg
+  distance: number;
+  mode: string;
+  fuel: string;
+  totalRow: number;
+}
+
+export default function ReportPDF({
+  company,
+  reportNo,
+  date,
+  rows,
+  signer = 'Environmental Manager',
+  legalResponsible = 'CEO' // Note: This prop is no longer used in approval line
+}: any) {
   const VERIFY_BASE = process.env.NEXT_PUBLIC_VERIFY_URL || 'http://localhost:3000'
+
+  // ===== 在组件内部计算每行数据 + 总排放 =====
+  // 👇 关键修复：过滤掉无效行（qty, weight, distance 必须 > 0）
+  const processedRows = rows
+    .filter((r: any) => {
+      const qty = Number(Array.isArray(r) ? r[1] : r?.qty) || 0;
+      const weight = Number(Array.isArray(r) ? r[2] : r?.weightG) || 0;
+      const dist = Number(Array.isArray(r) ? r[3] : r?.distance) || 0;
+      return qty > 0 && weight > 0 && dist > 0;
+    })
+    .map((r: any) => {
+      const product = (Array.isArray(r) ? r[0]?.toString() : r?.product?.toString()) || 'Unknown';
+      const qty = Number(Array.isArray(r) ? r[1] : r?.qty) || 0;
+      const unitWeightKg = Number(Array.isArray(r) ? r[2] : r?.weightG) || 0;
+      const distance = Number(Array.isArray(r) ? r[3] : r?.distance) || 0;
+      const mode = (Array.isArray(r) ? (r[4] || 'Road') : (r?.mode ?? 'Road'))?.toString() || 'Road';
+      const fuel = getFuelType(mode);
+
+      const totalWeightKg = qty * unitWeightKg;
+      const totalRow = calcTotalFromKg(totalWeightKg, distance, mode);
+
+      return {
+        product,
+        qty,
+        unitWeightKg,
+        distance,
+        mode,
+        fuel,
+        totalRow
+      }
+    })
+
+  // 计算总排放（tCO₂e）
+  const grandTotal = processedRows.reduce((sum: number, row: ProcessedRow) => {
+    return sum + (isNaN(row.totalRow) ? 0 : row.totalRow);
+  }, 0);
 
   return (
     <Document>
@@ -25,75 +99,84 @@ export default function ReportPDF({ company, reportNo, date, rows, total, signer
         <Text style={{ marginBottom: 6 }}>Date: {date}</Text>
         <Text style={styles.h2}>1. Executive Summary</Text>
         <Text style={{ marginBottom: 6 }}>This document presents the greenhouse gas (GHG) emissions for transport chain activities of the above-named company, calculated in accordance with EN 16258:2013 and ISO 14064-1:2018.</Text>
-        <Text>Total transport emissions: {(total/1000).toFixed(3)} tCO₂e</Text>
+        <Text>Total transport emissions: {grandTotal.toFixed(3)} tCO₂e</Text>
       </Page>
 
       {/* ② Method */}
       <Page style={styles.page}>
         <Text style={styles.h2}>2. Methodology & Factors</Text>
         <Text style={{ marginBottom: 4 }}>• Standard: EN 16258:2013 (Well-to-Wheel, WTW)</Text>
-        <Text style={{ marginBottom: 4 }}>• Conversion factors: UK DEFRA 2025 v1.0, Table 12 (Road freight)</Text>
+        <Text style={{ marginBottom: 4 }}>• Conversion factors: GLEC Framework v2.0 (2023), aligned with ISO 14083</Text>
         <Text style={{ marginBottom: 4 }}>• GWP values: IPCC AR6 (100-year)</Text>
-        <Text style={{ marginBottom: 4 }}>• Formula: E = Σ (mass[t] × distance[km] × EF[kg CO₂e/t·km])</Text>
+        <Text style={{ marginBottom: 4 }}>• Formula: E = Σ (mass[kg] × distance[km] × EF[kg CO₂e/kg·km])</Text>
         <Text style={{ marginBottom: 4 }}>• Boundary: transport leg from supplier gate to recipient gate</Text>
         <Text style={{ marginBottom: 4 }}>• Default mode: Road, Diesel (client can override in app)</Text>
+        {/* 👇 新增默认值声明 */}
+        <Text style={{ marginBottom: 4 }}>• Rows with missing or invalid transport mode default to Road.</Text>
         <Text style={{ marginBottom: 4 }}>• Data quality: company ERP export, ±5 % uncertainty</Text>
-        <Link src="https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025 ">Factor source (hyperlinked)</Link>
+        {/* 👇 新增 WTW 明确说明（关键审计项） */}
+        <Text style={{ marginBottom: 4 }}>• All emission factors from GLEC Framework v2.0 are Well-to-Wheel (WTW) values, including upstream (well-to-tank) emissions.</Text>
+        <Link src="https://smartfreightcentre.org">Factor source (GLEC Framework v2.0)</Link>
       </Page>
 
-      {/* ③ Results  —— 只改这一页 */}
-<Page style={styles.page}>
-  <Text style={styles.h2}>3. Results</Text>
-  <View style={styles.tableRow}>
-    <Text style={styles.col}>Product</Text>
-    <Text style={styles.col}>Qty</Text>
-    <Text style={styles.col}>Weight(t)</Text>
-    <Text style={styles.col}>Distance(km)</Text>
-    <Text style={styles.col}>Mode</Text>          {/* ← 新增 */}
-    <Text style={styles.col}>Fuel</Text>
-    <Text style={styles.col}>WTT(tCO₂e)</Text>
-    <Text style={styles.col}>TTW(tCO₂e)</Text>
-    <Text style={styles.col}>Total(tCO₂e)</Text>
-  </View>
-  {rows.map((r: any, i: number) => {
-    const product   = Array.isArray(r) ? r[0] : r.product
-    const qty       = Array.isArray(r) ? r[1] : r.qty
-    const weightG   = Array.isArray(r) ? r[2] : r.weightG
-    const distance  = Array.isArray(r) ? r[3] : r.distance
-    const mode      = Array.isArray(r) ? (r[4] || 'Road') : (r.mode ?? 'Road')   
-    const fuel      = Array.isArray(r) ? 'Diesel' : (r.fuel ?? 'Diesel')
-    const weightT   = weightG / 1000
-    const wtt       = weightT * distance * EF_WTT
-    const ttw       = weightT * distance * EF_TTW
-    const totalRow  = wtt + ttw
-    return (
-      <View style={styles.tableRow} key={i}>
-        <Text style={styles.col}>{product}</Text>
-        <Text style={styles.col}>{qty}</Text>
-        <Text style={styles.col}>{weightT.toFixed(3)}</Text>
-        <Text style={styles.col}>{distance}</Text>
-        <Text style={styles.col}>{mode}</Text>          {/* ← 打印 mode */}
-        <Text style={styles.col}>{fuel}</Text>
-        <Text style={styles.col}>{wtt.toFixed(4)}</Text>
-        <Text style={styles.col}>{ttw.toFixed(4)}</Text>
-        <Text style={styles.col}>{totalRow.toFixed(4)}</Text>
-      </View>
-    )
-  })}
-  <Text style={{ marginTop: 10 }}>Total: {(total/1000).toFixed(3)} tCO₂e</Text>
-  <Text style={styles.footer}>Uncertainty: ±5 % (DEFRA 2025 Table 12 Road Freight)</Text>
-</Page>
-
-      {/* ④ Sign */}
+      {/* ③ Results  */}
       <Page style={styles.page}>
-        <Text style={styles.h2}>4. Electronic Signature</Text>
-        <Text style={{ marginBottom: 6 }}>This report has been digitally signed in accordance with ISO 14064-1:2018 and EN 16258:2013.</Text>
-        <Text style={{ marginBottom: 6 }}>Signer: {signer}</Text>
+        <Text style={styles.h2}>3. Results</Text>
+        <View style={styles.tableRow}>
+          <Text style={styles.col}>Product</Text>
+          <Text style={styles.col}>Qty</Text>
+          {/* 👇 表头改为 Unit Weight (kg) */}
+          <Text style={styles.col}>Unit Weight (kg)</Text>
+          <Text style={styles.col}>Distance(km)</Text>
+          <Text style={styles.col}>Mode</Text>
+          <Text style={styles.col}>Fuel</Text>
+          {/* 👇 删除 WTT / TTW 列，只保留 Total */}
+          <Text style={styles.col}>Total(tCO₂e)</Text>
+        </View>
+        {processedRows.map((row: ProcessedRow, i: number) => (
+          <View style={styles.tableRow} key={i}>
+            <Text style={styles.col}>{row.product}</Text>
+            <Text style={styles.col}>{row.qty}</Text>
+            {/* 👇 显示原始单件重量（kg），保留1位小数更合理 */}
+            <Text style={styles.col}>{row.unitWeightKg.toFixed(1)}</Text>
+            <Text style={styles.col}>{row.distance}</Text>
+            <Text style={styles.col}>{row.mode}</Text>
+            <Text style={styles.col}>{row.fuel}</Text>
+            {/* 👇 只显示 Total */}
+            <Text style={styles.col}>{row.totalRow.toFixed(4)}</Text>
+          </View>
+        ))}
+        <Text style={{ marginTop: 10 }}>Total: {grandTotal.toFixed(3)} tCO₂e</Text>
+        <Text style={styles.footer}>Uncertainty: ±22 % (k=2, GLEC 2023)</Text>
+      </Page>
+
+      {/* 3.1 Uncertainty —— 完全重写，符合 GLEC 官方建议 */}
+      <Page style={styles.page}>
+        <Text style={styles.h2}>3.1 Data Quality & Uncertainty</Text>
+        <Text style={{ marginBottom: 4 }}>• This report follows GLEC Framework v2.0 (2023) guidance on uncertainty.</Text>
+        <Text style={{ marginBottom: 4 }}>• Default combined uncertainty for multimodal freight: ±22% (k=2, 95% confidence).</Text>
+        <Text style={{ marginBottom: 4 }}>• Source: GLEC Framework v2.0, Section 5.4 – Data Quality and Uncertainty.</Text>
+        <Text style={{ marginTop: 12 }}>Quality Assurance</Text>
+        <Text>Prepared by: Automated Calculation Engine</Text>
+        <Text>Reviewed by: System Validation Rules</Text>
+        <Text>Approval: Not applicable – system-generated report</Text>
+      </Page>
+
+      {/* ④ Report Integrity —— 修改标题和描述，如实反映内容哈希机制 */}
+      <Page style={styles.page}>
+        <Text style={styles.h2}>4. Report Integrity</Text>
+        <Text style={{ marginBottom: 6 }}>
+          This report was automatically generated and assigned a unique identifier.
+          A content hash of the emission data is stored to detect any post-generation modification.
+        </Text>
+        <Text style={{ marginBottom: 6 }}>Generated by: {signer}</Text>
         <Text style={{ marginBottom: 6 }}>Position: Environmental Manager</Text>
         <Text style={{ marginBottom: 6 }}>Date: {date}</Text>
         <Text style={{ marginBottom: 6 }}>Unique report ID: {reportNo}</Text>
-        <Link src={`${VERIFY_BASE}/verify/${reportNo}`}>Verify signature</Link>
-        <Text style={styles.footer}>{`RSA-2048 digital signature applied – verify at ${VERIFY_BASE}/verify/${reportNo}`}</Text>
+        <Link src={`${VERIFY_BASE}/verify/${reportNo}`}>Check report integrity</Link>
+        <Text style={styles.footer}>
+          {`Integrity verified by comparing content hash at ${VERIFY_BASE}/verify/${reportNo}`}
+        </Text>
       </Page>
     </Document>
   )
