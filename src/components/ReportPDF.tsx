@@ -93,7 +93,7 @@ export default function ReportPDF({
     <Document>
       {/* ① Cover */}
       <Page style={styles.page}>
-        <Text style={styles.h1}>Carbon Scope-3 Transport Report</Text>
+        <Text style={styles.h1}>Scope 3 Category 4: Upstream Transportation Emissions Report</Text>
         <Text style={{ marginBottom: 6 }}>Company: {company}</Text>
         <Text style={{ marginBottom: 6 }}>Report No.: {reportNo}</Text>
         <Text style={{ marginBottom: 6 }}>Date: {date}</Text>
@@ -113,7 +113,7 @@ export default function ReportPDF({
         <Text style={{ marginBottom: 4 }}>• Default mode: Road, Diesel (client can override in app)</Text>
         {/* 👇 新增默认值声明 */}
         <Text style={{ marginBottom: 4 }}>• Rows with missing or invalid transport mode default to Road.</Text>
-        <Text style={{ marginBottom: 4 }}>• Data quality: company ERP export, ±5 % uncertainty</Text>
+        {/* ❌ 已删除冲突的 "±5% uncertainty" 行 */}
         {/* 👇 新增 WTW 明确说明（关键审计项） */}
         <Text style={{ marginBottom: 4 }}>• All emission factors from GLEC Framework v2.0 are Well-to-Wheel (WTW) values, including upstream (well-to-tank) emissions.</Text>
         <Link src="https://smartfreightcentre.org">Factor source (GLEC Framework v2.0)</Link>
