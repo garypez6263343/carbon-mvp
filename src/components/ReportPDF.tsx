@@ -1,13 +1,47 @@
 import { Document, Page, Text, View, StyleSheet, Link } from '@react-pdf/renderer'
 
 const styles = StyleSheet.create({
-  page: { padding: 40, fontSize: 11, lineHeight: 1.35, backgroundColor: '#ffffff' },
-  h1: { fontSize: 20, marginBottom: 12, textAlign: 'center', color: '#1f2937', fontWeight: 'bold' },
-  h2: { fontSize: 14, marginBottom: 8, color: '#374151', fontWeight: 'bold' },
-  tableRow: { flexDirection: 'row', marginBottom: 4, borderBottomWidth: 0.5, borderBottomColor: '#e5e7eb', paddingVertical: 3 },
-  col: { width: '14%', fontSize: 10, color: '#374151' },
-  link: { color: '#2563eb', textDecoration: 'underline' },
-  footer: { marginTop: 28, fontSize: 8, color: '#6b7280', textAlign: 'center' }
+  page: { 
+    padding: 40, 
+    fontSize: 12, // ↑ 从 11 改为 12
+    lineHeight: 1.5, // ↑ 从 1.35 改为 1.5
+    backgroundColor: '#ffffff' 
+  },
+  h1: { 
+    fontSize: 22, // ↑ 从 20 改为 22
+    marginBottom: 16, 
+    textAlign: 'center', 
+    color: '#1a1a1a', // 稍深一点，更专业
+    fontWeight: 'bold' 
+  },
+  h2: { 
+    fontSize: 16, // ↑ 从 14 改为 16
+    marginBottom: 10, 
+    color: '#2d2d2d', 
+    fontWeight: 'bold' 
+  },
+  tableRow: { 
+    flexDirection: 'row', 
+    marginBottom: 6, // ↑ 从 4 改为 6
+    borderBottomWidth: 0.6, 
+    borderBottomColor: '#d1d5db', 
+    paddingVertical: 4 
+  },
+  col: { 
+    width: '14%', 
+    fontSize: 11, // ↑ 从 10 改为 11
+    color: '#333333' // 稍深，提升可读性
+  },
+  link: { 
+    color: '#2563eb', 
+    textDecoration: 'underline' 
+  },
+  footer: { 
+    marginTop: 32, 
+    fontSize: 9, // ↑ 从 8 改为 9
+    color: '#666666', 
+    textAlign: 'center' 
+  }
 })
 
 // ===== 1. 系数字典 (kg CO₂e / kg·km) —— 使用 GLEC Framework v2.0 (2023)，符合 EN 16258 国际实践 =====
@@ -94,28 +128,27 @@ export default function ReportPDF({
       {/* ① Cover */}
       <Page style={styles.page}>
         <Text style={styles.h1}>Scope 3 Category 4: Upstream Transportation Emissions Report</Text>
-        <Text style={{ marginBottom: 6 }}>Company: {company}</Text>
-        <Text style={{ marginBottom: 6 }}>Report No.: {reportNo}</Text>
-        <Text style={{ marginBottom: 6 }}>Date: {date}</Text>
+        <Text style={{ marginBottom: 8 }}>Company: {company}</Text>
+        <Text style={{ marginBottom: 8 }}>Report No.: {reportNo}</Text>
+        <Text style={{ marginBottom: 8 }}>Date: {date}</Text>
         <Text style={styles.h2}>1. Executive Summary</Text>
-        <Text style={{ marginBottom: 6 }}>This document presents the greenhouse gas (GHG) emissions for transport chain activities of the above-named company, calculated in accordance with EN 16258:2013 and ISO 14064-1:2018.</Text>
+        <Text style={{ marginBottom: 8 }}>This document presents the greenhouse gas (GHG) emissions for transport chain activities of the above-named company, calculated in accordance with EN 16258:2013 and ISO 14064-1:2018.</Text>
         <Text>Total transport emissions: {grandTotal.toFixed(3)} tCO₂e</Text>
       </Page>
 
       {/* ② Method */}
       <Page style={styles.page}>
         <Text style={styles.h2}>2. Methodology & Factors</Text>
-        <Text style={{ marginBottom: 4 }}>• Standard: EN 16258:2013 (Well-to-Wheel, WTW)</Text>
-        <Text style={{ marginBottom: 4 }}>• Conversion factors: GLEC Framework v2.0 (2023), aligned with ISO 14083</Text>
-        <Text style={{ marginBottom: 4 }}>• GWP values: IPCC AR6 (100-year)</Text>
-        <Text style={{ marginBottom: 4 }}>• Formula: E = Σ (mass[kg] × distance[km] × EF[kg CO₂e/kg·km])</Text>
-        <Text style={{ marginBottom: 4 }}>• Boundary: transport leg from supplier gate to recipient gate</Text>
-        <Text style={{ marginBottom: 4 }}>• Default mode: Road, Diesel (client can override in app)</Text>
+        <Text style={{ marginBottom: 6 }}>• Standard: EN 16258:2013 (Well-to-Wheel, WTW)</Text>
+        <Text style={{ marginBottom: 6 }}>• Conversion factors: GLEC Framework v2.0 (2023), aligned with ISO 14083</Text>
+        <Text style={{ marginBottom: 6 }}>• GWP values: IPCC AR6 (100-year)</Text>
+        <Text style={{ marginBottom: 6 }}>• Formula: E = Σ (mass[kg] × distance[km] × EF[kg CO₂e/kg·km])</Text>
+        <Text style={{ marginBottom: 6 }}>• Boundary: transport leg from supplier gate to recipient gate</Text>
+        <Text style={{ marginBottom: 6 }}>• Default mode: Road, Diesel (client can override in app)</Text>
         {/* 👇 新增默认值声明 */}
-        <Text style={{ marginBottom: 4 }}>• Rows with missing or invalid transport mode default to Road.</Text>
-        {/* ❌ 已删除冲突的 "±5% uncertainty" 行 */}
+        <Text style={{ marginBottom: 6 }}>• Rows with missing or invalid transport mode default to Road.</Text>
         {/* 👇 新增 WTW 明确说明（关键审计项） */}
-        <Text style={{ marginBottom: 4 }}>• All emission factors from GLEC Framework v2.0 are Well-to-Wheel (WTW) values, including upstream (well-to-tank) emissions.</Text>
+        <Text style={{ marginBottom: 6 }}>• All emission factors from GLEC Framework v2.0 are Well-to-Wheel (WTW) values, including upstream (well-to-tank) emissions.</Text>
         <Link src="https://smartfreightcentre.org">Factor source (GLEC Framework v2.0)</Link>
       </Page>
 
@@ -146,17 +179,17 @@ export default function ReportPDF({
             <Text style={styles.col}>{row.totalRow.toFixed(4)}</Text>
           </View>
         ))}
-        <Text style={{ marginTop: 10 }}>Total: {grandTotal.toFixed(3)} tCO₂e</Text>
+        <Text style={{ marginTop: 12, fontSize: 13, fontWeight: 'bold' }}>Total: {grandTotal.toFixed(3)} tCO₂e</Text>
         <Text style={styles.footer}>Uncertainty: ±22 % (k=2, GLEC 2023)</Text>
       </Page>
 
       {/* 3.1 Uncertainty —— 完全重写，符合 GLEC 官方建议 */}
       <Page style={styles.page}>
         <Text style={styles.h2}>3.1 Data Quality & Uncertainty</Text>
-        <Text style={{ marginBottom: 4 }}>• This report follows GLEC Framework v2.0 (2023) guidance on uncertainty.</Text>
-        <Text style={{ marginBottom: 4 }}>• Default combined uncertainty for multimodal freight: ±22% (k=2, 95% confidence).</Text>
-        <Text style={{ marginBottom: 4 }}>• Source: GLEC Framework v2.0, Section 5.4 – Data Quality and Uncertainty.</Text>
-        <Text style={{ marginTop: 12 }}>Quality Assurance</Text>
+        <Text style={{ marginBottom: 6 }}>• This report follows GLEC Framework v2.0 (2023) guidance on uncertainty.</Text>
+        <Text style={{ marginBottom: 6 }}>• Default combined uncertainty for multimodal freight: ±22% (k=2, 95% confidence).</Text>
+        <Text style={{ marginBottom: 6 }}>• Source: GLEC Framework v2.0, Section 5.4 – Data Quality and Uncertainty.</Text>
+        <Text style={{ marginTop: 14, marginBottom: 6 }}>Quality Assurance</Text>
         <Text>Prepared by: Automated Calculation Engine</Text>
         <Text>Reviewed by: System Validation Rules</Text>
         <Text>Approval: Not applicable – system-generated report</Text>
@@ -165,14 +198,14 @@ export default function ReportPDF({
       {/* ④ Report Integrity —— 修改标题和描述，如实反映内容哈希机制 */}
       <Page style={styles.page}>
         <Text style={styles.h2}>4. Report Integrity</Text>
-        <Text style={{ marginBottom: 6 }}>
+        <Text style={{ marginBottom: 8 }}>
           This report was automatically generated and assigned a unique identifier.
           A content hash of the emission data is stored to detect any post-generation modification.
         </Text>
-        <Text style={{ marginBottom: 6 }}>Generated by: {signer}</Text>
-        <Text style={{ marginBottom: 6 }}>Position: Environmental Manager</Text>
-        <Text style={{ marginBottom: 6 }}>Date: {date}</Text>
-        <Text style={{ marginBottom: 6 }}>Unique report ID: {reportNo}</Text>
+        <Text style={{ marginBottom: 8 }}>Generated by: {signer}</Text>
+        <Text style={{ marginBottom: 8 }}>Position: Environmental Manager</Text>
+        <Text style={{ marginBottom: 8 }}>Date: {date}</Text>
+        <Text style={{ marginBottom: 8 }}>Unique report ID: {reportNo}</Text>
         <Link src={`${VERIFY_BASE}/verify/${reportNo}`}>Check report integrity</Link>
         <Text style={styles.footer}>
           {`Integrity verified by comparing content hash at ${VERIFY_BASE}/verify/${reportNo}`}
